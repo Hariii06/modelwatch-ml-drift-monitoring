@@ -15,8 +15,10 @@ import { AlertPanel } from './components/AlertPanel';
 import { ExperimentPanel } from './components/ExperimentPanel';
 import { DiagnosticsPanel } from './components/DiagnosticsPanel';
 import { StakeholderValidation } from './components/StakeholderValidation';
+import { GroundTruthPanel } from './components/GroundTruthPanel';
 import { MethodologyModal } from './components/MethodologyModal';
 import { DemoGuideModal } from './components/DemoGuideModal';
+import { LegacyAdapterModal } from './components/LegacyAdapterModal';
 
 import { Sparkles, Info, ArrowRight, ShieldAlert } from 'lucide-react';
 import './styles/main.css';
@@ -29,6 +31,7 @@ export const App: React.FC = () => {
   const [selectedFeature, setSelectedFeature] = useState<FeatureName>('transaction_amount');
   const [isGuideOpen, setIsGuideOpen] = useState(false);
   const [isMethodologyOpen, setIsMethodologyOpen] = useState(false);
+  const [isLegacyAdapterOpen, setIsLegacyAdapterOpen] = useState(false);
 
   // Generate synthetic data (10k baseline, 5k current)
   const { baseline, current } = useMemo(() => {
@@ -65,6 +68,7 @@ export const App: React.FC = () => {
         onRunDemo={handleRunDemo}
         onOpenGuide={() => setIsGuideOpen(true)}
         onOpenMethodology={() => setIsMethodologyOpen(true)}
+        onOpenLegacyAdapter={() => setIsLegacyAdapterOpen(true)}
       />
 
       {/* Main Navigation */}
@@ -145,6 +149,10 @@ export const App: React.FC = () => {
           </div>
         )}
 
+        {activeTab === 'ground_truth' && (
+          <GroundTruthPanel currentPredictions={current} />
+        )}
+
         {activeTab === 'experiment' && (
           <ExperimentPanel modelType={modelType} thresholds={thresholds} />
         )}
@@ -161,6 +169,7 @@ export const App: React.FC = () => {
       {/* Modals */}
       <MethodologyModal isOpen={isMethodologyOpen} onClose={() => setIsMethodologyOpen(false)} />
       <DemoGuideModal isOpen={isGuideOpen} onClose={() => setIsGuideOpen(false)} />
+      <LegacyAdapterModal isOpen={isLegacyAdapterOpen} onClose={() => setIsLegacyAdapterOpen(false)} />
 
       {/* Footer */}
       <footer style={{ marginTop: 'auto', background: 'var(--navy-900)', borderTop: '1px solid var(--navy-700)', color: '#94A3B8', padding: '1rem 1.75rem', fontSize: '0.78rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

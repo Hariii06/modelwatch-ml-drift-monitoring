@@ -144,3 +144,135 @@ export interface StakeholderFeedback {
   timestamp: string;
   isSynthetic: boolean;
 }
+
+/**
+ * Legacy v1 API prediction payload structure representing historical/external batch formats
+ */
+export interface LegacyPredictionPayloadV1 {
+  record_id?: string;
+  tx_amt?: number | string | null;
+  tx_cnt?: number | string;
+  account_age?: number | string;
+  user_risk?: number | string;
+  login_cnt?: number | string;
+  device_score?: number | string;
+  geo_score?: number | string;
+  prev_fraud?: number | string;
+  svc_freq?: number | string;
+  pred_label?: number | string;
+  score?: number | string;
+  timestamp_str?: string;
+  [key: string]: any;
+}
+
+/**
+ * Envelope container for versioned API batch ingestion requests
+ */
+export interface ApiIngestionEnvelope {
+  version: 'v1_legacy' | 'v2_modern' | string;
+  modelType?: ModelType;
+  monitoringPeriod?: 'baseline' | 'current';
+  records: any[];
+}
+
+/**
+ * Detailed transformation result returned by versioned payload adapters
+ */
+export interface TransformationResult {
+  success: boolean;
+  version: string;
+  transformedCount: number;
+  observations: Observation[];
+  errors: string[];
+  warnings: string[];
+  fieldMappings: Record<string, string>;
+}
+
+/**
+ * Delayed real-world ground-truth outcome label record
+ */
+export interface GroundTruthOutcome {
+  record_id: string;
+  actual_label: number; // 0 or 1 (e.g., actual fraud chargeback confirmed)
+  outcome_timestamp: string; // ISO 8601 timestamp when outcome confirmed
+  delay_days?: number;
+  metadata?: Record<string, any>;
+}
+
+/**
+ * Store-and-forward prediction batch held in client ingestion buffer
+ */
+export interface BufferedBatch {
+  batch_id: string;
+  observations: Observation[];
+  ingested_at: string;
+  status: 'pending' | 'retrying' | 'processed' | 'failed';
+  retry_count: number;
+  last_attempt_at?: string;
+  error?: string;
+  batch_size: number;
+}
+
+/**
+ * Matched prediction-to-outcome evaluation pair
+ */
+export interface MatchedPair {
+  prediction: Observation;
+  outcome: GroundTruthOutcome;
+  delayDays: number;
+}
+
+/**
+ * Result of matching predictions to delayed ground-truth outcomes
+ */
+export interface OutcomeMatchResult {
+  matchedPairs: MatchedPair[];
+  unmatchedPredictions: Observation[];
+  unmatchedOutcomes: GroundTruthOutcome[];
+  duplicateOutcomes: string[];
+  validationErrors: string[];
+}
+
+/**
+ * Ground-truth evaluation metrics (Confusion Matrix, Precision/Recall/F1, ROC-AUC)
+ */
+export interface PerformanceMetrics {
+  truePositives: number;
+  trueNegatives: number;
+  falsePositives: number;
+  falseNegatives: number;
+  accuracy: number;
+  precision: number;
+  recall: number;
+  f1Score: number;
+  rocAuc: number | null;
+  rocAucExplanation?: string;
+  matchedCount: number;
+  unmatchedCount: number;
+  totalPredictions: number;
+  outcomeCoveragePercent: number;
+}
+
+/**
+ * Aggregated latency/delay statistics for confirmed ground-truth outcomes
+ */
+export interface DelayMetrics {
+  matchedCount: number;
+  avgDelayDays: number;
+  minDelayDays: number;
+  maxDelayDays: number;
+}
+
+/**
+ * Snapshot of client-side Store-and-Forward Buffer queue state
+ */
+export interface BufferQueueState {
+  batches: BufferedBatch[];
+  pendingCount: number;
+  failedCount: number;
+  processedCount: number;
+  totalBufferedRecords: number;
+  maxCapacity: number;
+}
+
+

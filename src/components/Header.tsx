@@ -1,6 +1,6 @@
 import React from 'react';
 import { ModelType } from '../types/monitoring';
-import { ShieldCheck, Play, HelpCircle, BookOpen } from 'lucide-react';
+import { ShieldCheck, Play, HelpCircle, BookOpen, Database } from 'lucide-react';
 
 interface HeaderProps {
   selectedModel: ModelType;
@@ -8,6 +8,7 @@ interface HeaderProps {
   onRunDemo: () => void;
   onOpenGuide: () => void;
   onOpenMethodology: () => void;
+  onOpenLegacyAdapter: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -15,7 +16,8 @@ export const Header: React.FC<HeaderProps> = ({
   onSelectModel,
   onRunDemo,
   onOpenGuide,
-  onOpenMethodology
+  onOpenMethodology,
+  onOpenLegacyAdapter
 }) => {
   return (
     <header className="header-bar">
@@ -53,6 +55,14 @@ export const Header: React.FC<HeaderProps> = ({
         <button className="btn-demo-quick" onClick={onRunDemo} title="Run standard baseline vs drifted demo flow">
           <Play size={16} fill="white" />
           Run Demo
+        </button>
+
+        <button
+          className="btn-header-ghost"
+          onClick={onOpenLegacyAdapter}
+          title="Legacy v1 API Coexistence Adapter Demo"
+        >
+          <Database size={15} /> Legacy API
         </button>
 
         <button

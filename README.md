@@ -80,6 +80,7 @@ flowchart TD
 $$PSI = \sum_{i=1}^{k} \left( E_i - A_i \right) \times \ln\left( \frac{E_i}{A_i} \right)$$
 - $A_i$: Baseline population proportion in bin $i$
 - $E_i$: Current monitoring population proportion in bin $i$
+- **Binning Strategy & Resilience:** 10 quantile bins derived from baseline distribution with automatic equal-width fallback for degenerate/zero-variance arrays. Smoothing constant ($\epsilon = 10^{-4}$) prevents zero-frequency $\ln(0)$ division errors.
 - **Threshold Interpretation:**
   - $PSI < 0.10$: **Stable** (No significant drift)
   - $0.10 \le PSI < 0.20$: **Warning** (Moderate distribution shift)
@@ -126,17 +127,64 @@ $$D = \sup_x |F_{1,n_1}(x) - F_{2,n_2}(x)|$$
 
 ## 🧪 Automated Unit Test Suite
 
-The repository includes an independent test suite in `src/tests/driftEngine.test.ts` covering:
-- ✅ **PSI Calculation on Identical Arrays:** Asserts $PSI < 0.01$.
-- ✅ **PSI Calculation on Shifted Arrays:** Asserts $PSI \ge 0.20$.
-- ✅ **KS Test Statistic:** Asserts shift detection with $p < 0.05$.
-- ✅ **Scenario A Classification:** Asserts stable dataset maps to GREEN status.
-- ✅ **Scenario B Classification:** Asserts shifted dataset maps to RED alert.
-- ✅ **Test Case 1 (Missing Data):** Asserts 18% missingness warning without engine crash.
-- ✅ **Test Case 2 (Noisy Data):** Asserts outlier warning without engine crash.
-- ✅ **Configurable Threshold Updates:** Asserts live status recalculation.
+The repository includes an independent test suite in `src/tests/driftEngine.test.ts` covering **40 automated assertions**:
+- ✅ **Tests 1–8:** Core PSI & KS statistics, scenario classification (Stable/Drifted), edge cases (18% missing data, $120k noise outliers), dynamic threshold recalculation.
+- ✅ **Tests 9–13:** Extended PSI mathematical resilience (zero-variance constant arrays, $N=3$ small arrays, quantile edge collisions, linear scale invariance $\times 1,000$, extreme negative ranges).
+- ✅ **Tests 14–20:** Versioned `v1_legacy` API payload transformation, numeric string parsing, malformed payload rejection, unsupported schema versioning, ISO timestamp normalization, duplicate ID safety.
+- ✅ **Tests 21–24:** Ground-truth prediction-outcome matching, unmatched prediction tracking, orphaned outcome tracking, duplicate outcome detection.
+- ✅ **Tests 25–30:** Confusion matrix breakdown (TP, TN, FP, FN), accuracy, precision, recall, harmonic mean F1-score, zero-denominator safety (preventing NaN/Infinity).
+- ✅ **Tests 31–32:** Mann-Whitney U ROC-AUC rank-sum calculation, single-class ROC-AUC unavailable fallback explanation.
+- ✅ **Tests 33–34:** Outcome coverage percentage, delay latency min/max/average days calculation.
+- ✅ **Tests 35–40:** Store-and-Forward buffer FIFO queueing, HTTP 503 failure simulation, retry state transitions, processed batch flushing, capacity limit enforcement, in-memory storage fallback, end-to-end failure/retry/flush lifecycle.
 
 Tests can be executed via command line (`npm test`) or viewed live in the **Diagnostic Test Suite** tab inside the web UI.
+
+---
+
+## ⏳ Delayed Ground-Truth Outcome & Store-and-Forward Buffer Engine
+
+### Ground-Truth Lifecycle & Outcome Matching
+Real-world fraud chargebacks and default labels arrive with significant operational delay (e.g. 30–90 days post-prediction). ModelWatch implements a deterministic matching engine (`src/engine/outcomeEngine.ts`) that links live prediction observations with delayed ground-truth outcome records by record ID.
+
+### Performance Metrics & Evaluation
+- **Confusion Matrix:** Evaluates True Positives, True Negatives, False Positives, and False Negatives.
+- **Precision, Recall, F1:** Computes exact classification metrics with zero-denominator guards ($P = 0, R = 0$ if denominators are zero).
+- **ROC-AUC Score:** Computes exact Area Under the ROC Curve using Mann-Whitney U rank-sum statistics with fractional rank-tie resolution.
+- **Outcome Coverage & Latency:** Tracks outcome confirmation percentage ($Count_{matched} / Count_{total}$) and delay latency (min, max, and average days).
+
+### Client-Side Store-and-Forward Buffer (`src/engine/bufferEngine.ts`)
+- **FIFO Queueing:** Buffers prediction batches in client-side queue when downstream API ingestion endpoints experience transient failures.
+- **Retry & Flush Lifecycle:** Automatically tracks retry counts per batch upon HTTP 503 simulation, re-attempts ingestion, and flushes processed batches upon confirmation.
+- **Resilient Persistence:** Persists state to `localStorage` under namespaced key `modelwatch_store_and_forward_v1` with automatic fallback to in-memory storage if storage is unavailable.
+- **Capacity Limits:** Enforces max batch limits (FIFO eviction) to prevent unbounded memory growth.
+
+> [!NOTE]
+> *Prototype Foundation Notice:* The Store-and-Forward buffer is a client-side prototype foundation for demonstration and unit-testing purposes. It does not replace enterprise distributed message brokers (Kafka/RabbitMQ).
+
+---
+
+## 🔄 Versioned Legacy API Coexistence Layer (`v1_legacy`)
+
+### Why Legacy Coexistence is Needed
+Enterprise banking environments frequently deploy legacy prediction logging services that use legacy JSON field naming conventions (e.g., `tx_amt`, `user_risk`, `score`) and string-formatted data primitives. ModelWatch provides a versioned API adapter layer (`src/engine/legacyAdapter.ts`) ensuring historical prediction batches can seamlessly ingest into the modern statistical monitoring engine.
+
+### `v1_legacy` Field Translation Map
+| Legacy Field (`v1_legacy`) | Canonical Observation Field | Description & Normalization |
+| :--- | :--- | :--- |
+| `tx_amt` | `transaction_amount` | Numeric transaction amount (parsed from float string if needed) |
+| `user_risk` | `customer_risk_score` | Risk score (0-100) |
+| `score` | `prediction_probability` | Model output confidence score ($0.0 \le score \le 1.0$) |
+| `pred_label` | `model_prediction` | Prediction class decision (0 or 1) |
+| `device_score` | `device_risk_score` | Device risk factor ($0.0 \le score \le 1.0$) |
+| `geo_score` | `geographic_risk_score` | Location risk factor ($0.0 \le score \le 1.0$) |
+| `login_cnt` | `login_frequency` | Weekly customer login count |
+| `timestamp_str` | `timestamp` | Timestamp string (parsed & normalized to ISO 8601) |
+
+### Validation & Error Handling Behavior
+- **Version Check:** Rejects payload envelopes without a supported version (e.g. `v1_legacy`, `v2_modern`).
+- **Probability Bounds:** Enforces $0.0 \le score \le 1.0$. Rejects values $> 1.0$ or $< 0.0$.
+- **Timestamp Normalization:** Converts valid date strings to UTC ISO 8601; flags malformed date strings.
+- **Side-Effect Free & Deterministic:** Returns structured `TransformationResult` containing mapped `Observation[]`, errors, warnings, and field maps without mutating global state.
 
 ---
 

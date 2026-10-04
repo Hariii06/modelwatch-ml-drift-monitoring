@@ -51,11 +51,43 @@ export function calculateFeatureStats(values: (number | null | undefined)[]): Fe
 }
 
 /**
- * Population Stability Index (PSI) calculation engine
- * 1. Derives 10 quantile bin boundaries from baseline valid values.
- * 2. Counts baseline and current frequencies in each bin.
- * 3. Applies small smoothing constant (1e-4) to prevent division/log of zero.
- * 4. Sums (CurrentRatio - BaselineRatio) * ln(CurrentRatio / BaselineRatio).
+ * Population Stability Index (PSI) Calculation Engine
+ *
+ * MATHEMATICAL FORMULA:
+ *   PSI = \sum_{i=1}^{k} \left( E_i - A_i \right) \times \ln\left( \frac{E_i}{A_i} \right)
+ *
+ *   Where:
+ *   - A_i (Expected / Baseline): Proportion of baseline observations in bin i (A_i = count_baseline_i / N_baseline)
+ *   - E_i (Actual / Current): Proportion of current monitoring observations in bin i (E_i = count_current_i / N_current)
+ *   - k: Total number of active monitoring bins (default k = 10)
+ *
+ * BINNING STRATEGY & FALLBACKS:
+ * 1. Quantile Binning: Attempts to derive 10 quantile bin boundaries from baseline valid values,
+ *    distributing baseline observations evenly across 10 quantile bins.
+ * 2. Monotonic Boundary Check: Enforces strict monotonic growth (`edge > previous_edge`) to skip duplicate
+ *    quantiles caused by repeating data values.
+ * 3. Equal-Width Fallback: If unique quantile boundaries are fewer than 3 (`binEdges.length < 4`), the engine
+ *    automatically falls back to equal-width binning spanning `[minVal, maxVal]`.
+ * 4. Zero-Variance & Constant Arrays: For constant arrays (where minVal === maxVal), `(maxVal - minVal) / numBins`
+ *    evaluates to 0, which falls back to `step = 1`. All values safely fall into the first bin.
+ * 5. Small Array Resilience (e.g. N = 3): Fallback equal-width binning guarantees finite, non-crashing output
+ *    without throwing array index exceptions.
+ * 6. Scale Invariance: Linear scaling of baseline and current data (e.g. multiplying by 1,000) scales bin
+ *    boundaries proportionally while preserving relative bin ratios, maintaining scale invariance.
+ *
+ * NUMERICAL SMOOTHING & ZERO-FREQUENCY PREVENTION:
+ * - Small Smoothing Constant (\epsilon = 1e-4): Applied via `Math.max(rawRatio, 1e-4)`. This prevents
+ *   division-by-zero or undefined logarithm calculations (`\ln(0)` = -\infty) when a bin contains zero
+ *   observations in baseline or current monitoring windows.
+ *
+ * INVALID & EMPTY INPUT HANDLING:
+ * - Null/NaN Filtering: All inputs pass through `getValidValues()`.
+ * - Empty Array Safety: Returns `{ psiScore: 0, bins: [] }` if either baseline or current valid count is 0.
+ *
+ * @param baselineRaw Array of raw baseline observations (numerical, null, or undefined)
+ * @param currentRaw Array of raw current period observations (numerical, null, or undefined)
+ * @param numBins Number of distribution bins to compute (default 10)
+ * @returns Object containing aggregate PSI score and array of detailed BinDistribution objects
  */
 export function calculatePSI(
   baselineRaw: (number | null | undefined)[],

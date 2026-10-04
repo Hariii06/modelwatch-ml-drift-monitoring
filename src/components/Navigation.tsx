@@ -1,7 +1,7 @@
 import React from 'react';
-import { LayoutDashboard, FlaskConical, CheckCircle2, MessageSquareText } from 'lucide-react';
+import { LayoutDashboard, FlaskConical, CheckCircle2, MessageSquareText, ShieldCheck } from 'lucide-react';
 
-export type TabType = 'dashboard' | 'experiment' | 'diagnostics' | 'validation';
+export type TabType = 'dashboard' | 'ground_truth' | 'experiment' | 'diagnostics' | 'validation';
 
 interface NavigationProps {
   activeTab: TabType;
@@ -17,6 +17,13 @@ export const Navigation: React.FC<NavigationProps> = ({ activeTab, onSelectTab, 
         onClick={() => onSelectTab('dashboard')}
       >
         <LayoutDashboard size={17} /> Drift Monitoring Dashboard
+      </button>
+
+      <button
+        className={`nav-tab ${activeTab === 'ground_truth' ? 'active' : ''}`}
+        onClick={() => onSelectTab('ground_truth')}
+      >
+        <ShieldCheck size={17} /> Ground Truth & Buffer Engine
       </button>
 
       <button
