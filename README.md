@@ -127,7 +127,7 @@ $$D = \sup_x |F_{1,n_1}(x) - F_{2,n_2}(x)|$$
 
 ## 🧪 Automated Unit Test Suite
 
-The repository includes an independent test suite in `src/tests/driftEngine.test.ts` covering **40 automated assertions**:
+The repository includes an independent test suite in `src/tests/driftEngine.test.ts` covering **50 automated assertions**:
 - ✅ **Tests 1–8:** Core PSI & KS statistics, scenario classification (Stable/Drifted), edge cases (18% missing data, $120k noise outliers), dynamic threshold recalculation.
 - ✅ **Tests 9–13:** Extended PSI mathematical resilience (zero-variance constant arrays, $N=3$ small arrays, quantile edge collisions, linear scale invariance $\times 1,000$, extreme negative ranges).
 - ✅ **Tests 14–20:** Versioned `v1_legacy` API payload transformation, numeric string parsing, malformed payload rejection, unsupported schema versioning, ISO timestamp normalization, duplicate ID safety.
@@ -136,10 +136,144 @@ The repository includes an independent test suite in `src/tests/driftEngine.test
 - ✅ **Tests 31–32:** Mann-Whitney U ROC-AUC rank-sum calculation, single-class ROC-AUC unavailable fallback explanation.
 - ✅ **Tests 33–34:** Outcome coverage percentage, delay latency min/max/average days calculation.
 - ✅ **Tests 35–40:** Store-and-Forward buffer FIFO queueing, HTTP 503 failure simulation, retry state transitions, processed batch flushing, capacity limit enforcement, in-memory storage fallback, end-to-end failure/retry/flush lifecycle.
+- ✅ **Tests 41–44:** Client-side mock Ingestion API (`/predict`, `/outcomes`, `/health`), deterministic 503 simulation, local persistence manager history, bounded FIFO history, structured JSON report export.
+- ✅ **Test 45:** React Error Boundary lifecycle, error trapping, component stack logging, and state reset recovery.
+- ✅ **Tests 46–50:** Threshold override persistence saving/loading, deterministic JSON report export structure, destructive storage clearing, OpenAPI 3.0 specification contract integrity, SystemSettingsModal contract & telemetry schema.
 
 Tests can be executed via command line (`npm test`) or viewed live in the **Diagnostic Test Suite** tab inside the web UI.
 
 ---
+
+## ⚙️ System Settings, Local Persistence & OpenAPI Client Specifications (`src/components/SystemSettingsModal.tsx`)
+
+### Purpose & Architecture
+ModelWatch provides a dedicated System Settings modal (`SystemSettingsModal.tsx`) accessible directly from the top header bar (**System & Export** button). It provides an executive and developer-facing control center for:
+1. **Threshold Overrides Management:** Safely editing and persisting custom statistical thresholds (`psiWarning`, `psiCritical`, `ksPValueThreshold`, `predictionRateWarningDelta`) using `PersistenceManager.saveThresholdOverrides()`.
+2. **Storage Telemetry Diagnostics:** Displaying real-time browser storage metrics (`localStorage` mode vs `in-memory fallback`, `modelwatch_storage_v1_` namespace, active history count).
+3. **Structured JSON Report Export:** Exporting complete monitoring audit snapshots (`modelwatch-report.json`) via browser Blob downloads.
+4. **Destructive Persistence Reset:** Safely wiping saved baselines, overrides, and history logs with a double-step confirmation prompt.
+5. **OpenAPI 3.0 Contract Inspector:** Displaying an interactive developer specification for the mock REST ingestion endpoints.
+
+### OpenAPI 3.0 Client-Side API Contract Specifications
+| Endpoint | Method | Supported Status Codes | Description & Headers |
+| :--- | :--- | :--- | :--- |
+| `/api/v1/predict` | `POST` | `200`, `400`, `422`, `503` | Accepts `v1_legacy` and `v2_modern` JSON payload envelopes; includes `X-ModelWatch-Version: v1.0.0` header. |
+| `/api/v1/outcomes` | `POST` | `200`, `400`, `422`, `503` | Ingests ground-truth actual labels (`record_id`, `actual_label`, `outcome_timestamp`) for delayed matching. |
+| `/api/v1/health` | `GET` | `200 OK` | Returns system health status, version string, and storage availability telemetry. |
+
+> [!NOTE]
+> *Client-Side Architecture Notice:* All REST API endpoints are implemented as typed asynchronous Promise-based mock functions within `src/engine/ingestionService.ts`. No external backend web server, database, or infrastructure is deployed.
+
+## 💾 Client-Side Persistence Schema — No External Database
+
+> [!IMPORTANT]
+> **ARCHITECTURE NOTICE:**
+> ModelWatch runs 100% client-side in the browser. It does **not** rely on external database servers (PostgreSQL, MongoDB), cloud message brokers (Kafka/RabbitMQ), or Redis caches. All data persistence, buffer storage, and historical logs use browser `localStorage` with automatic in-memory fallback (`Map<string, string>`).
+
+### Storage Namespace & Keys
+All persistent state is stored under the explicit `modelwatch_storage_v1_` namespace:
+
+| Storage Key Name | Entity / Interface | Description & Lifecycle |
+| :--- | :--- | :--- |
+| `modelwatch_storage_v1_baseline_{modelType}` | `BaselineEntity` | Persisted 10,000 baseline observations per model type (`fraud_detection`, `service_prioritisation`). |
+| `modelwatch_storage_v1_thresholds` | `ThresholdConfig` | Persisted statistical threshold overrides (`psiWarning`, `psiCritical`, `ksPValueThreshold`, `predictionRateWarningDelta`). |
+| `modelwatch_storage_v1_history` | `MonitoringHistoryEntity[]` | Bounded execution history log (FIFO max limit: 20 records). |
+| `modelwatch_store_and_forward_v1` | `StoreAndForwardQueueState` | Client-side Store-and-Forward buffer queue state for ingestion retry handling. |
+
+### Persisted Entity Interfaces (`src/engine/persistenceManager.ts`)
+
+```typescript
+// Baseline Dataset Entity
+export interface BaselineEntity {
+  id: string;
+  name: string;
+  modelType: ModelType;
+  observations: Observation[];
+  createdAt: string;
+}
+
+// Bounded Execution History Log Entity (FIFO max 20)
+export interface MonitoringHistoryEntity {
+  id: string;
+  timestamp: string;
+  modelType: ModelType;
+  scenario: ScenarioType;
+  overallStatus: string;
+  driftedFeaturesCount: number;
+  result: MonitoringResult;
+}
+
+// Storage Telemetry Diagnostics
+export interface StorageTelemetry {
+  isLocalStorageAvailable: boolean;
+  storageMode: 'localStorage' | 'memory';
+  storageNamespace: string;
+  historyCount: number;
+  hasCustomBaseline: boolean;
+  hasThresholdOverrides: boolean;
+  storageUsedBytes: number;
+}
+```
+
+### Serialized JSON Report Structure (`modelwatch-report.json`)
+The pure JSON report export (`exportReportJson()`) aggregates monitoring results, execution history, and telemetry:
+```json
+{
+  "reportMetadata": {
+    "system": "ModelWatch Enterprise ML Drift Monitoring",
+    "exportedAt": "2026-10-04T16:00:00.000Z",
+    "version": "v1.0.0",
+    "environment": "Client-Side Ingestion & Statistical Engine"
+  },
+  "currentMonitoringResult": { ... },
+  "executionHistorySummary": [ ... ],
+  "storageTelemetry": { ... }
+}
+```
+
+---
+
+
+
+## 🛡️ React Error Boundary & Application Resilience (`src/components/ErrorBoundary.tsx`)
+
+### Purpose & Architecture
+In complex single-page banking dashboards, an unexpected JavaScript rendering exception inside a single chart, feature grid, or modal component can crash the React component tree and leave the user with an unrecoverable blank white screen. 
+
+ModelWatch implements a dedicated class-based React Error Boundary (`src/components/ErrorBoundary.tsx`) to trap unhandled render exceptions, protect the parent UI framework, log technical diagnostics, and render an inline ModelWatch recovery shield.
+
+### Mounting Boundaries
+- **Top-Level Root:** Wrapped around the root `<App />` component in `src/main.tsx` to shield against top-level SPA rendering failures.
+- **Section Boundary:** Wrapped around the main content layout container (`<main className="app-container">`) in `src/App.tsx` so that errors inside individual dashboard tabs or charts leave the top header bar, navigation tabs, and diagnostic suite fully functional.
+
+### Error Trapping & Fallback Behavior
+When an unhandled exception occurs in a child component:
+1. `static getDerivedStateFromError(error)` catches the error object and sets `hasError: true`.
+2. `componentDidCatch(error, errorInfo)` logs technical details and component stack traces to the console and invokes optional `onError` prop handlers.
+3. The boundary renders a dark slate fallback UI styled consistently with the ModelWatch theme, presenting:
+   - Captured error type and message string.
+   - **Reset & Try Again** primary button calling `handleReset()`.
+   - **Reload Application** secondary button (`window.location.reload()`).
+   - Collapsible **Show/Hide Technical Diagnostics** toggle displaying component stack traces for developers.
+
+### Recovery Mechanism
+Clicking **Reset & Try Again** executes `handleReset()`, which resets `hasError: false`, clears cached error state, and triggers an optional `onReset` callback. This allows the application to re-render the child component tree cleanly without requiring a full page refresh.
+
+### Resilience Unit Testing (Test 45)
+Resilience is validated deterministically in `src/tests/driftEngine.test.ts` (Test 45):
+- Tests `ErrorBoundary.getDerivedStateFromError()` to confirm state mutation.
+- Instantiates `ErrorBoundary` and invokes `componentDidCatch()` with a mock error stack to verify `onError` callback dispatching.
+- Invokes `handleReset()` to confirm state reset and `onReset` callback dispatching.
+
+### Technical Limitations
+Client-side React Error Boundaries adhere to React standard specifications and do **not** catch:
+1. Asynchronous event handler exceptions (e.g. `onClick` callbacks; handled via standard `try/catch`).
+2. Asynchronous background operations (e.g. `setTimeout` or `fetch` Promises).
+3. Server-side rendering (SSR) errors.
+4. Errors thrown directly within the ErrorBoundary component itself.
+
+---
+
 
 ## ⏳ Delayed Ground-Truth Outcome & Store-and-Forward Buffer Engine
 

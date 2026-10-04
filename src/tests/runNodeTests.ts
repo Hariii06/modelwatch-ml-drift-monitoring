@@ -4,7 +4,7 @@ console.log('\n======================================================');
 console.log('  ModelWatch ML Drift Engine — Automated Test Suite  ');
 console.log('======================================================\n');
 
-const results = executeUnitTests();
+const results = await executeUnitTests();
 let passedCount = 0;
 let failedCount = 0;
 

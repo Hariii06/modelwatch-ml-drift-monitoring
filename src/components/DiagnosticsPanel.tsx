@@ -7,13 +7,11 @@ export const DiagnosticsPanel: React.FC = () => {
   const [tests, setTests] = useState<TestCaseResult[]>([]);
   const [isRunning, setIsRunning] = useState(false);
 
-  const runTests = () => {
+  const runTests = async () => {
     setIsRunning(true);
-    setTimeout(() => {
-      const results = executeUnitTests();
-      setTests(results);
-      setIsRunning(false);
-    }, 150);
+    const results = await executeUnitTests();
+    setTests(results);
+    setIsRunning(false);
   };
 
   useEffect(() => {

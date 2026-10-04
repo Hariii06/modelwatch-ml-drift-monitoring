@@ -1,6 +1,6 @@
 import React from 'react';
 import { ModelType } from '../types/monitoring';
-import { ShieldCheck, Play, HelpCircle, BookOpen, Database } from 'lucide-react';
+import { ShieldCheck, Play, HelpCircle, BookOpen, Database, Settings } from 'lucide-react';
 
 interface HeaderProps {
   selectedModel: ModelType;
@@ -9,6 +9,7 @@ interface HeaderProps {
   onOpenGuide: () => void;
   onOpenMethodology: () => void;
   onOpenLegacyAdapter: () => void;
+  onOpenSystemSettings: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -17,7 +18,8 @@ export const Header: React.FC<HeaderProps> = ({
   onRunDemo,
   onOpenGuide,
   onOpenMethodology,
-  onOpenLegacyAdapter
+  onOpenLegacyAdapter,
+  onOpenSystemSettings
 }) => {
   return (
     <header className="header-bar">
@@ -67,6 +69,14 @@ export const Header: React.FC<HeaderProps> = ({
 
         <button
           className="btn-header-ghost"
+          onClick={onOpenSystemSettings}
+          title="System Settings, Storage Telemetry & Report Export"
+        >
+          <Settings size={15} /> System & Export
+        </button>
+
+        <button
+          className="btn-header-ghost"
           onClick={onOpenGuide}
           title="3-minute Demo Presentation Script"
         >
@@ -84,3 +94,4 @@ export const Header: React.FC<HeaderProps> = ({
     </header>
   );
 };
+
